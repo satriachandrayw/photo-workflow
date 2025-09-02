@@ -1,0 +1,421 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "portrait/render",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryData": true
+        }
+      },
+      "id": "8ca4c754-9529-418e-85be-560ca2ba868a",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -2048,
+        128
+      ],
+      "webhookId": "ae0fdf7c-c773-4956-a861-c42bb9fb3ae6"
+    },
+    {
+      "parameters": {},
+      "id": "329fcd27-1891-421e-b125-7d62b7817b9b",
+      "name": "Preprocess",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        -1456,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ailabtools.com/v1/face/analyze",
+        "options": {
+          "response": {}
+        }
+      },
+      "id": "7e674408-a271-409f-905b-9056f69f1f4e",
+      "name": "Describe (AILabTools)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1504,
+        128
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "cc04ecd2-a4c0-448b-9b3b-feaa582165ec",
+      "name": "Map + Build Prompt",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.together.xyz/v1/images/generate",
+        "options": {
+          "response": {}
+        }
+      },
+      "id": "550895b1-4600-4ff6-a0cf-7e17e441e784",
+      "name": "Generate (Together FLUX schnell)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1040,
+        128
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "2a0e86ef-2794-4002-8961-535400469b47",
+      "name": "Normalize Gen Output",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        -944,
+        -96
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "5fa171cf-dec9-4c0b-82d7-f8ba87073464",
+      "name": "Decide Swap?",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.shouldSwap}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "12699fe8-58bd-4231-bb03-8b05ea35105d",
+      "name": "IF Swap",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vmodel.ai/v1/face-swap",
+        "options": {
+          "response": {}
+        }
+      },
+      "id": "49b1e5db-9204-44fd-8548-fe1962f78000",
+      "name": "Face Swap (VModel)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "554d0a9e-283d-463a-b346-83c2228bccc2",
+      "name": "Skip Swap",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        -112
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "63ac1087-0cfc-4fb3-a713-42257722c1c6",
+      "name": "Normalize Portrait",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.remove.bg/v1.0/removebg",
+        "options": {
+          "response": {}
+        }
+      },
+      "id": "f9cbaab2-1b4e-429a-b4f2-3ead68068b50",
+      "name": "Remove BG → #014431",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        544,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "d4c8189e-1775-4cb9-bd38-42b90adebea2",
+      "name": "Respond (PNG)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        784,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const inItem = $input.first();\nconst r = inItem.json; // HTTP node response from Describe\nconst prev = $node[\"pre-process\"].json || {};\nconst meta = prev.meta || {};\n\n// Best-effort parsing (adjust to match AILabTools schema)\nconst subject = {\n  hair: { length: r?.data?.hair?.length || r?.hair?.length || null,\n          color:  r?.data?.hair?.color  || r?.hair?.color  || null,\n          texture:r?.data?.hair?.texture|| r?.hair?.texture|| null },\n  eyes: { color: r?.data?.eye?.color || r?.eye?.color || null,\n          shape: r?.data?.eye?.shape || r?.eye?.shape || null },\n  eyebrows: { thickness: r?.data?.eyebrow?.thickness || r?.eyebrow?.thickness || null,\n              shape:     r?.data?.eyebrow?.shape     || r?.eyebrow?.shape     || null },\n  skin: { tone: r?.data?.skin?.tone || r?.skin?.tone || null,\n          texture: r?.data?.skin?.texture || r?.skin?.texture || null },\n  facial_hair: r?.data?.beard?.type || r?.beard?.type || 'clean-shaven',\n  marks: (r?.data?.marks || r?.marks || []).slice(0,3),\n  accessories: {\n    glasses: r?.data?.eye?.glass || r?.eye?.glass || 'none', // none|regular|sunglasses\n    mask: r?.data?.mask || r?.mask || 'none',\n    headwear: (r?.data?.hat?.style || r?.hat?.style) ? 'headwear' : 'none',\n    headwearColor: r?.data?.hat?.color || r?.hat?.color || null,\n  }\n};\n\n// Hijab/Headscarf fallback (very naive keyword match if description exists)\nif (typeof r?.description === 'string') {\n  const d = r.description.toLowerCase();\n  if (/(hijab|headscarf|head scarf|shayla|khimar)/.test(d)) {\n    subject.accessories.headwear = 'headscarf';\n  }\n}\n\nconst pose = meta.pose === 'NO_LOOK'\n  ? 'loose close-up, 3/4 profile, gaze off-camera, shoulders gently angled'\n  : 'loose close-up, front-facing, direct eye contact, neutral professional expression';\n\nconst acc = subject.accessories || {};\nconst accText = [\n  acc.headwear === 'headscarf' ? 'wearing a headscarf that covers the hair' :\n  (acc.headwear !== 'none' ? 'wearing headwear' : null),\n  acc.glasses === 'regular' ? 'wearing thin rectangular eyeglasses' :\n  (acc.glasses === 'sunglasses' ? 'wearing sunglasses' : null),\n  acc.mask !== 'none' ? 'wearing a face mask' : null\n].filter(Boolean).join(', ');\n\nconst subjectStr = [\n  `${subject.hair.length||''} ${subject.hair.color||''} ${subject.hair.texture||''} hair`.trim(),\n  `${subject.eyebrows.thickness||''} ${subject.eyebrows.shape||''} eyebrows`.trim(),\n  `${subject.eyes.color||''} ${subject.eyes.shape||''} eyes`.trim(),\n  `${subject.skin.tone||''} ${subject.skin.texture||''} skin`.trim(),\n  subject.facial_hair || 'clean-shaven',\n  accText\n].filter(Boolean).join(', ');\n\nconst prompt = `Single-person portrait, ${pose}. Subject exactly matches: ${subjectStr}. ` +\n               `Studio lighting: soft key at 45°, gentle fill; realistic skin texture; chest-up framing; 4:3; natural color. ` +\n               `Background: plain neutral temporary background (will be replaced).`;\n\n\nreturn [{\n  json: {\n    subject,\n    meta,\n    generation: {\n      prompt,\n      seed: meta.seed,\n      width: meta.outWidth,\n      height: meta.outHeight\n    },\n    // pass through source info carried from Preprocess\n    sourceType: prev.sourceType,\n    image_url:  prev.image_url,\n    binaryProperty: prev.binaryProperty\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1264,
+        128
+      ],
+      "id": "65ce62eb-5494-40f8-a1c5-c12e95f7626b",
+      "name": "map-build-prompt"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize inputs, set defaults, compute output size and bg hex\n\nconst item = $input.first();\nconst body = item.json || {};\nconst pose = (body.pose || 'LOOK_CAMERA').toUpperCase();\nconst orientation = (body.orientation || 'landscape').toLowerCase();\nconst seed = Number.isInteger(body.seed) ? body.seed : 1337;\nconst outWidth = orientation === 'portrait' ? 1536 : 2048;\nconst outHeight = orientation === 'portrait' ? 2048 : 1536;\nconst forceSwap = !!body.forceSwap; // allow manual override\n\nitem.json.meta = {\n        pose,\n        orientation,\n        seed,\n        outWidth,\n        outHeight,\n        forceSwap,\n        bgHex: $vars.APP_BG_HEX || '#014431',\n};\n\n// Support both image_url and uploaded binary. If uploaded, store property name.\n// n8n's Webhook binary property name defaults to 'data' if 'binaryData: true'.\nif (item.binary && item.binary.data) {\n        item.json.sourceType = 'binary';\n        item.json.binaryProperty = 'data';\n} else if (body.image_url) {\n        item.json.sourceType = 'url';\n        item.json.image_url = body.image_url;\n} else {\n        // Expect a URL; you can also add a prior node to fetch remote file into binary.\n        throw new Error('Provide image_url in JSON body or upload a file in form-data \"data\".');\n}\n\nreturn [item];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1760,
+        128
+      ],
+      "id": "9e13788a-3fcc-4cf1-add2-a6c4699d68d0",
+      "name": "pre-process"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize provider response to {gen_image_url or gen_image_b64}\nconst r = $input.first().json;\n// Try common shapes:\nlet url = r?.data?.[0]?.url || r?.output?.[0] || r?.image_url || null;\nlet b64 = r?.data?.[0]?.b64_json || r?.image_base64 || null;\nreturn [{\n  json: {\n    ...$node[\"map-build-prompt\"].json, // carry forward subject/meta/etc from Map node\n    gen: { url, b64, provider: 'together/flux-schnell' }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -832,
+        128
+      ],
+      "id": "f1806afa-ccd3-4778-86fa-a06071d1b878",
+      "name": "normalize-gen-output"
+    },
+    {
+      "parameters": {
+        "jsCode": "const it = $input.first().json;\n// Basic heuristic: honor meta.forceSwap flag; otherwise, swap if accessories suggest headwear or glasses (to better lock identity).\nconst headwear = it.subject?.accessories?.headwear || 'none';\nconst glasses = it.subject?.accessories?.glasses || 'none';\nconst should = it.meta.forceSwap || headwear !== 'none' || glasses !== 'none';\nreturn [{ json: { ...it, shouldSwap: should } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        128
+      ],
+      "id": "64605e3f-c479-4d19-9922-8368bbd41507",
+      "name": "decide-swap"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        224
+      ],
+      "id": "cf28bfae-06b7-4955-8bff-661c7bb915ca",
+      "name": "skip-swap"
+    },
+    {
+      "parameters": {
+        "jsCode": "const it = $input.first().json;\n// Prefer swapped image url if present, else generated url\nlet portrait_url = it?.output?.url || it?.result?.url || it?.gen?.url || null;\n// Some providers return base64; if so, keep in json for downstream (remove.bg accepts URL or file).\nlet portrait_b64 = it?.output?.b64 || it?.result?.b64 || it?.gen?.b64 || null;\nreturn [{ json: { ...it, portrait: { url: portrait_url, b64: portrait_b64 } } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        144
+      ],
+      "id": "b6779235-1ffb-49ef-92be-2fd9a7051d7e",
+      "name": "normalize-portrait"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "IF Swap": {
+      "main": [
+        [
+          {
+            "node": "Face Swap (VModel)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "skip-swap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove BG → #014431": {
+      "main": [
+        [
+          {
+            "node": "Respond (PNG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "pre-process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Describe (AILabTools)": {
+      "main": [
+        [
+          {
+            "node": "map-build-prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "pre-process": {
+      "main": [
+        [
+          {
+            "node": "Describe (AILabTools)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "map-build-prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate (Together FLUX schnell)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate (Together FLUX schnell)": {
+      "main": [
+        [
+          {
+            "node": "normalize-gen-output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize-gen-output": {
+      "main": [
+        [
+          {
+            "node": "decide-swap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "decide-swap": {
+      "main": [
+        [
+          {
+            "node": "IF Swap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "skip-swap": {
+      "main": [
+        [
+          {
+            "node": "normalize-portrait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Face Swap (VModel)": {
+      "main": [
+        [
+          {
+            "node": "normalize-portrait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize-portrait": {
+      "main": [
+        [
+          {
+            "node": "Remove BG → #014431",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "c475403f-38bf-418a-860b-7e2e064894af",
+  "meta": {
+    "instanceId": "8c437e6f61dc49d5a83105d0e88f0c63a6319d29100d48b1ba43062b5b37b4b1"
+  },
+  "id": "VYTfJuwtIA6ZdZsj",
+  "tags": []
+}
