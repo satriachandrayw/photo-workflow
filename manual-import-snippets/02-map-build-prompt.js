@@ -3,25 +3,65 @@ const r = inItem.json; // HTTP node response from Describe
 const prev = $node["Preprocess"].json || {};
 const meta = prev.meta || {};
 
-// Best-effort parsing (adjust to match AILabTools schema)
-const subject = {
-  hair: { length: r?.data?.hair?.length || r?.hair?.length || null,
-          color:  r?.data?.hair?.color  || r?.hair?.color  || null,
-          texture:r?.data?.hair?.texture|| r?.hair?.texture|| null },
-  eyes: { color: r?.data?.eye?.color || r?.eye?.color || null,
-          shape: r?.data?.eye?.shape || r?.eye?.shape || null },
-  eyebrows: { thickness: r?.data?.eyebrow?.thickness || r?.eyebrow?.thickness || null,
-              shape:     r?.data?.eyebrow?.shape     || r?.eyebrow?.shape     || null },
-  skin: { tone: r?.data?.skin?.tone || r?.skin?.tone || null,
-          texture: r?.data?.skin?.texture || r?.skin?.texture || null },
-  facial_hair: r?.data?.beard?.type || r?.beard?.type || 'clean-shaven',
-  marks: (r?.data?.marks || r?.marks || []).slice(0,3),
-  accessories: {
-    glasses: r?.data?.eye?.glass || r?.eye?.glass || 'none', // none|regular|sunglasses
-    mask: r?.data?.mask || r?.mask || 'none',
-    headwear: (r?.data?.hat?.style || r?.hat?.style) ? 'headwear' : 'none',
-    headwearColor: r?.data?.hat?.color || r?.hat?.color || null,
+// Parse possible LLM-style JSON payload inside code block
+function parseSubjectFromLLM(resp) {
+  try {
+    let text = null;
+    if (Array.isArray(resp) && resp[0]?.content?.parts?.[0]?.text) {
+      text = resp[0].content.parts[0].text;
+    } else if (resp?.content?.parts?.[0]?.text) {
+      text = resp.content.parts[0].text;
+    }
+    if (!text || typeof text !== 'string') return null;
+    const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    const jsonStr = match && match[1] ? match[1] : text;
+    return JSON.parse(jsonStr);
+  } catch (_) {
+    return null;
   }
+}
+
+const parsed = parseSubjectFromLLM(r);
+const norm = (x) => {
+  if (x === undefined || x === null) return null;
+  if (typeof x === 'string') {
+    const t = x.trim();
+    if (t === '' || t.toLowerCase() === 'null') return null;
+    return t;
+  }
+  return x;
+};
+
+// Best-effort parsing (prefer new JSON shape, fallback to prior schema)
+const subject = {
+  hair: {
+    length:  norm(parsed?.hair?.length)   ?? r?.data?.hair?.length   ?? r?.hair?.length   ?? null,
+    color:   norm(parsed?.hair?.color)    ?? r?.data?.hair?.color    ?? r?.hair?.color    ?? null,
+    texture: norm(parsed?.hair?.texture)  ?? r?.data?.hair?.texture  ?? r?.hair?.texture  ?? null,
+  },
+  eyes: {
+    color: norm(parsed?.eyes?.color) ?? r?.data?.eye?.color ?? r?.eye?.color ?? null,
+    shape: norm(parsed?.eyes?.shape) ?? r?.data?.eye?.shape ?? r?.eye?.shape ?? null,
+  },
+  eyebrows: {
+    thickness: norm(parsed?.eyebrows?.thickness) ?? r?.data?.eyebrow?.thickness ?? r?.eyebrow?.thickness ?? null,
+    shape:     norm(parsed?.eyebrows?.shape)     ?? r?.data?.eyebrow?.shape     ?? r?.eyebrow?.shape     ?? null,
+  },
+  skin: {
+    tone:    norm(parsed?.skin?.tone)    ?? r?.data?.skin?.tone    ?? r?.skin?.tone    ?? null,
+    texture: norm(parsed?.skin?.texture) ?? r?.data?.skin?.texture ?? r?.skin?.texture ?? null,
+  },
+  facial_hair: norm(parsed?.facial_hair) ?? r?.data?.beard?.type ?? r?.beard?.type ?? 'clean-shaven',
+  marks: (Array.isArray(parsed?.marks) ? parsed.marks : (r?.data?.marks || r?.marks || [])).slice(0, 3),
+  accessories: (() => {
+    const pacc = parsed?.accessories || {};
+    return {
+      glasses:       norm(pacc.glasses)       ?? r?.data?.eye?.glass ?? r?.eye?.glass ?? 'none', // none|regular|sunglasses
+      mask:          norm(pacc.mask)          ?? r?.data?.mask       ?? r?.mask       ?? 'none',
+      headwear:      norm(pacc.headwear)      ?? ((r?.data?.hat?.style || r?.hat?.style) ? 'headwear' : 'none'),
+      headwearColor: norm(pacc.headwearColor) ?? r?.data?.hat?.color ?? r?.hat?.color ?? null,
+    };
+  })(),
 };
 
 // Hijab/Headscarf fallback (very naive keyword match if description exists)
